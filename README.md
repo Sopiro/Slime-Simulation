@@ -7,7 +7,11 @@ inspired by: https://youtu.be/X-iSQQgOd1A
 
 [video](https://youtu.be/XLHZVTX6k_E)  
 
-# Examples
+## Examples
 ![img1](.github/image3.gif)  
-![img1](.github/image1.gif)  
-![img1](.github/image2.gif)  
+![img2](.github/image1.gif)  
+![img3](.github/image2.gif)  
+
+## Physarum polycephalum
+
+![Physarum](.github/physarum.jpg)
