@@ -1,0 +1,149 @@
+#pragma kernel Update
+#pragma kernel Postprocess
+
+#define PI 3.141592
+
+int width;
+int height;
+uint numAgents;
+float moveSpeed;
+float deltaTime;
+
+int senseRange;
+float sensorLength;
+float sensorAngleSpacing;
+float turnSpeed;
+float marchingError;
+
+struct Agent {
+	float2 pos;
+	float angle;
+	float4 type;
+};
+
+RWTexture2D<float4> TrailMap;
+RWStructuredBuffer<Agent> agents;
+
+uint hash(uint state)
+{
+	state ^= 2747636419u;
+	state *= 2654435769u;
+	state ^= state >> 16;
+	state *= 2654435769u;
+	state ^= state >> 16;
+	state *= 2654435769u;
+	return state;
+}
+
+float sense(Agent agent, float angle)
+{
+	float2 sensorDir = float2(cos(agent.angle + angle), sin(agent.angle + angle));
+	float2 sensorCenter = agent.pos + sensorDir * sensorLength;
+
+	float sum = 0;
+	int kernelHalfWidth = (senseRange - 1) >> 1;
+
+	for (int oy = -kernelHalfWidth; oy <= kernelHalfWidth; oy++)
+	{
+		for (int ox = -kernelHalfWidth; ox <= kernelHalfWidth; ox++)
+		{
+			int2 pos = sensorCenter + sensorDir * sensorLength;
+			float4 value = TrailMap[pos];
+
+			if (pos.x >= 0 && pos.x < width && pos.y >= 0 && pos.y < height)
+			{
+				sum += dot(agent.type, value);
+				//sun = normalize(cross(agent.type, value));
+			}
+		}
+	}
+
+	return sum;
+}
+
+[numthreads(16, 1, 1)]
+void Update(uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= numAgents) return;
+
+	Agent agent = agents[id.x];
+
+	uint random = hash(agent.pos.y * width + agent.pos.x) + hash(id.x);
+	float random01 = random / 4294967295.0;
+	float randomM11 = (random01 - 0.5) * 2;
+
+	float2 dir = float2(cos(agent.angle), sin(agent.angle));
+	float2 newPos = agent.pos + dir * moveSpeed * deltaTime;
+
+	if (newPos.x < 0 || newPos.x >= width || newPos.y < 0 || newPos.y >= height)
+	{
+		newPos.x = min(width - 1, max(0, newPos.x));
+		newPos.y = min(height - 1, max(0, newPos.y));
+		agents[id.x].angle = random01 * 2 * PI;
+	}
+
+	agents[id.x].pos = newPos;
+	TrailMap[int2(newPos.x, newPos.y)] += agent.type;
+
+	float forwardSenseWeight = sense(agent, 0);
+	float leftSenseWeight = sense(agent, sensorAngleSpacing);
+	float rightSenseWeight = sense(agent, -sensorAngleSpacing);
+
+	if (forwardSenseWeight > rightSenseWeight && forwardSenseWeight > leftSenseWeight)
+	{
+		agents[id.x].angle += marchingError * randomM11 * turnSpeed * deltaTime;
+	}
+	else if (forwardSenseWeight < leftSenseWeight && forwardSenseWeight < rightSenseWeight)
+	{
+		agents[id.x].angle += randomM11 * turnSpeed * deltaTime;
+	}
+	else if (leftSenseWeight > rightSenseWeight)
+	{
+		agents[id.x].angle += turnSpeed * deltaTime;
+	}
+	else if (rightSenseWeight > leftSenseWeight)
+	{
+		agents[id.x].angle -= turnSpeed * deltaTime;
+	}
+}
+
+
+RWTexture2D<float4> TrailMapProcessed;
+float evaporateSpeed;
+float diffuseSpeed;
+
+[numthreads(8, 8, 1)]
+void Postprocess(uint3 id : SV_DispatchThreadID)
+{
+	if (id.x < 0 || id.x >= width || id.y < 0 || id.y >= height) return;
+
+	float4 originalValue = TrailMap[id.xy];
+
+	float3x3 gaussianKernel =
+	{
+		0.0625, 0.125, 0.0625,
+		0.125, 0.25, 0.125,
+		0.0625, 0.125, 0.0625,
+	};
+
+	float4 sum = 0;
+	for (int oy = -1; oy <= 1; oy++)
+	{
+		for (int ox = -1; ox <= 1; ox++)
+		{
+			int2 samplePos = int2(id.x + ox, id.y + oy);
+
+			if (samplePos.x >= 0 && samplePos.x < width && samplePos.y >= 0 && samplePos.y < height)
+			{
+				sum += TrailMap[samplePos] * gaussianKernel[ox + 1][oy + 1];
+			}
+		}
+	}
+
+	float4 blurredResult = sum;
+
+	float4 diffusedValue = lerp(originalValue, blurredResult, diffuseSpeed * deltaTime);
+	float4 evaporatedValue = max(0, diffusedValue - evaporateSpeed * deltaTime);
+
+	TrailMapProcessed[id.xy] = evaporatedValue;
+}

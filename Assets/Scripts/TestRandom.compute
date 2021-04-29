@@ -1,0 +1,30 @@
+#pragma kernel TestRandom
+
+RWTexture2D<float4> res;
+uint width;
+uint height;
+
+uint hash(uint state)
+{
+	state ^= 2747636419u;
+	state *= 2654435769u;
+	state ^= state >> 16;
+	state *= 2654435769u;
+	state ^= state >> 16;
+	state *= 2654435769u;
+	return state;
+}
+
+[numthreads(8, 8, 1)]
+void TestRandom(
+	uint3 groupID : SV_GroupID,
+	uint3 groupThreadID : SV_GroupThreadID,
+	uint groupIndex : SV_GroupIndex,
+	uint3 id : SV_DispatchThreadID)
+{
+	if (id.x < 0 || id.x >= width || id.y < 0 || id.y >= height) return;
+
+	float color = hash(id.y * width + id.x) / 4294967295.0;
+
+	res[id.xy] = float4(color, color, color, 0);
+}
