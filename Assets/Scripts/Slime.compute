@@ -53,7 +53,7 @@ float sense(Agent agent, float angle)
 			if (pos.x >= 0 && pos.x < width && pos.y >= 0 && pos.y < height)
 			{
 				sum += dot(agent.type, value);
-				//sun = normalize(cross(agent.type, value));
+				//sum = normalize(cross(agent.type, value));
 			}
 		}
 	}
@@ -83,7 +83,8 @@ void Update(uint3 id : SV_DispatchThreadID)
 	}
 
 	agents[id.x].pos = newPos;
-	TrailMap[int2(newPos.x, newPos.y)] += agent.type;
+	// TrailMap[int2(newPos.x, newPos.y)] += agent.type;
+	TrailMap[int2(newPos.x, newPos.y)] = agent.type;
 
 	float forwardSenseWeight = sense(agent, 0);
 	float leftSenseWeight = sense(agent, sensorAngleSpacing);
@@ -115,8 +116,6 @@ float diffuseSpeed;
 [numthreads(8, 8, 1)]
 void Postprocess(uint3 id : SV_DispatchThreadID)
 {
-	if (id.x < 0 || id.x >= width || id.y < 0 || id.y >= height) return;
-
 	float4 originalValue = TrailMap[id.xy];
 
 	float3x3 gaussianKernel =

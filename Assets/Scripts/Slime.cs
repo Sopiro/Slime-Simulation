@@ -65,8 +65,8 @@ public class Slime : MonoBehaviour
 
             Vector4 type = Vector4.zero;
             type[Random.Range(0, 3)] = 1;
+
             agents[i].type = type;
-            
         }
 
         agentsBuffer = new ComputeBuffer(agents.Length, sizeof(float) * 7);
